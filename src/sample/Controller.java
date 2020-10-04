@@ -31,7 +31,7 @@ public class Controller {
     private static List<String> fileList = new ArrayList<>();
 
 
-    private static void convertToZip(File dir) throws FileNotFoundException {
+    private static void convertToZip(File dir) {
         boolean isExistArchive = false;
         try {
             File dirSrc = new File("src/");
@@ -45,15 +45,9 @@ public class Controller {
                 }
             }
             if (!isExistArchive) {
-                System.out.println("\nStart comperssing...");
-                compressDirectory(dir.toString(), "src/candidats.zip");
-                System.out.println("Finish comperssing...");
-//                new Tooltip("Архивация закончена -> candidats.zip");
-//                try {
-//                    Thread.sleep(3000L);
-//                } catch (InterruptedException e1) {
-//                    e1.printStackTrace();
-//                }
+                System.out.println("\nStart compressing...");
+                compressDirectory(dir.toString());
+                System.out.println("\nFinish compressing...");
             }
         } catch (Exception ex) {
             throw new RuntimeException(ex.getMessage(), ex);
@@ -73,21 +67,20 @@ public class Controller {
         }
     }
 
-    private static void compressDirectory(String dir, String zipFile) throws IOException {
+    private static void compressDirectory(String dir) throws IOException {
         File directory = new File(dir);
         getFileList(directory);
 
-        try (FileOutputStream fos = new FileOutputStream(zipFile);
+        try (FileOutputStream fos = new FileOutputStream("src/candidats.zip");
              ZipOutputStream zos = new ZipOutputStream(fos)) {
 
             for (String filePath : fileList) {
                 System.out.println("Compressing: " + filePath);
 
-                String name = filePath.substring(
-                        directory.getAbsolutePath().length() + 1,
-                        filePath.length());
+                String compressedNameOfDirectory = filePath.substring(
+                        directory.getAbsolutePath().length() + 1);
 
-                ZipEntry zipEntry = new ZipEntry(name);
+                ZipEntry zipEntry = new ZipEntry(compressedNameOfDirectory);
                 zos.putNextEntry(zipEntry);
 
                 try (FileInputStream fis = new FileInputStream(filePath)) {
@@ -96,7 +89,6 @@ public class Controller {
                     while ((length = fis.read(buffer)) > 0) {
                         zos.write(buffer, 0, length);
                     }
-
                     zos.closeEntry();
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -105,6 +97,14 @@ public class Controller {
         }
     }
 
+    /**
+     *
+     * @param url Адресс открытой ссылки для скачивания фото с Google Disk
+     * @param lastName Фамилия кандидата
+     * @param dirNameByTelephone Телефон кандидата в формате без первых символов (+7 или 8)
+     * @return Уникальное название файла, хранящее фото кандидата
+     * @throws IOException Ошибка при открытии/созданиия/записи изображения, файла или директории
+     */
     private static String loadImageFromUrl(URL url, String lastName, String dirNameByTelephone) throws IOException {
         String fileId = url.getQuery().substring(url.getQuery().indexOf("=") + 1);//google file id to download
         String requestDownloadImageUrl = String.format("https://drive.google.com/uc?export=download&id=%s", fileId);
@@ -119,7 +119,6 @@ public class Controller {
         try {
             BufferedImage image;
             image = ImageIO.read(url1);
-//            if (image != null && (countObjectsInCreatedPath == 0 || countObjectsInCreatedPath == 1)) {
             if (image != null) {
                 ImageIO.write(image, "jpg", new File(fileName));
                 image.flush();
@@ -132,18 +131,10 @@ public class Controller {
     }
 
     private static void copyFileUsingChannel(File source, File dest) throws IOException {
-        FileChannel sourceChannel = null;
-        FileChannel destChannel = null;
-        try {
-            sourceChannel = new FileInputStream(source).getChannel();
-            destChannel = new FileOutputStream(dest).getChannel();
+        try (FileChannel sourceChannel = new FileInputStream(source).getChannel(); FileChannel destChannel = new FileOutputStream(dest).getChannel()) {
             destChannel.transferFrom(sourceChannel, 0, sourceChannel.size());
-        } finally {
-            sourceChannel.close();
-            destChannel.close();
         }
     }
-
 
     @FXML
     public void convert_click() {
@@ -155,8 +146,8 @@ public class Controller {
         } catch (IOException e) {
             throw new RuntimeException(e.getMessage(), e);
         }
-        FileInputStream fip = null;
-        FileInputStream fipCopy = null;
+        FileInputStream fip;
+        FileInputStream fipCopy;
         try {
             fip = new FileInputStream(file);
             fipCopy = new FileInputStream(fileCopy);
@@ -165,8 +156,8 @@ public class Controller {
             throw new RuntimeException(ex.getMessage(), ex);
         }
 
-        XSSFWorkbook workbook = null;
-        XSSFWorkbook workbookCopy = null;
+        XSSFWorkbook workbook;
+        XSSFWorkbook workbookCopy;
         try {
             workbook = new XSSFWorkbook(fip);
             workbookCopy = new XSSFWorkbook(fipCopy);
@@ -177,7 +168,7 @@ public class Controller {
         XSSFSheet sheetCopy = workbookCopy.getSheetAt(0);
         try {
             try {
-                Path createdPath = Files.createDirectory(Paths.get("src/candidats/files"));
+                Files.createDirectory(Paths.get("src/candidats/files"));
             } catch (FileAlreadyExistsException ex) {
                 System.out.println("Directory /files is already exist " + ex.getMessage());
             } catch (IOException e) {
@@ -189,10 +180,8 @@ public class Controller {
                 System.out.println("candidatsCopy.xlsx open");
                 Iterator<Row> iter = sheet.iterator();
                 Iterator<Row> iterCopy = sheetCopy.iterator();
-                if (iter != null) {
-                    iter.next();
-                    iterCopy.next();
-                }
+                iter.next();
+                iterCopy.next();
 
                 while (iter.hasNext() && iterCopy.hasNext()) {
                     Row currentRow = iter.next();
@@ -202,22 +191,17 @@ public class Controller {
                     }
                     String urlPhoto = currentRow.getCell(2).getStringCellValue();
                     String lastName = currentRow.getCell(3).getStringCellValue();
-//                    String firstName = currentRow.getCell(4).getStringCellValue();
-//                    String middleName = currentRow.getCell(5).getStringCellValue();
-//                    String email = currentRow.getCell(1).getStringCellValue();
                     String telephone = currentRow.getCell(6).getStringCellValue().substring(2);
-
                     assert urlPhoto != null;
                     assert lastName != null;
-                    URL url = null;
+
+                    URL url;
                     try {
                         url = new URL(urlPhoto);
                     } catch (MalformedURLException ex) {
                         throw new RuntimeException(ex.getMessage(), ex);
                     }
-//                    if (url == null) {
-//                        throw new RuntimeException("Поле с ссылкой на фото пустое или не существует.");
-//                    }
+
                     try {
                         String photoFullPath = loadImageFromUrl(url, lastName, "files/" + telephone);
                         System.out.println("До = " + currentRowCopy.getCell(2));
@@ -238,11 +222,7 @@ public class Controller {
                 fip.close();
 
                 File file1 = new File("src/candidats");
-                try {
-                    convertToZip(file1);
-                } catch (FileNotFoundException e) {
-                    e.printStackTrace();
-                }
+                convertToZip(file1);
 
             } else {
                 System.out.println("candidats.xlsx either not exist or can't open");
@@ -253,7 +233,7 @@ public class Controller {
     }
 
     @FXML
-    public void choose_click() throws IOException {
+    public void choose_click() {
         FileChooser fileChooser = new FileChooser();
         fileChooser.setTitle("Open Resource File");
         FileChooser.ExtensionFilter xlsxFilter = new FileChooser.ExtensionFilter("XLSX files (*.xlsx)", "*.xlsx");
@@ -280,7 +260,7 @@ public class Controller {
                 }
             } else {
                 try {
-                    Path createdPath = Files.createDirectory(Paths.get("src/candidats/"));
+                    Files.createDirectory(Paths.get("src/candidats/"));
                 } catch (FileAlreadyExistsException ex) {
                     System.out.println("Directory candidats already exist");
                 }
